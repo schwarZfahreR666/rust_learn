@@ -34,19 +34,20 @@ impl MiniBitcask {
     }
 
     pub fn merge(&mut self) -> Result<()> {
-        // 创建一个新的临时用于用于写入
+        // 创建一个新的文件临时用于用于写入
         let mut merge_path = self.log.path.clone();
         merge_path.set_extension(MERGE_FILE_EXT);
 
         let mut new_log = Log::new(merge_path)?;
         let mut new_keydir = KeyDir::new();
 
-        // 重写数据
+        // 重写数据（从内存索引中读取，不存在重复的entry）
         for (key, (value_pos, value_len)) in self.keydir.iter() {
             let value = self.log.read_value(*value_pos, *value_len)?;
             let (offset, len) = new_log.write_entry(key, Some(&value))?;
             new_keydir.insert(
                 key.clone(),
+                // offset + len - *value_len =  value pos
                 (offset + len as u64 - *value_len as u64, *value_len),
             );
         }
@@ -133,6 +134,7 @@ impl<'a> ScanIterator<'a> {
     fn map(&mut self, item: (&Vec<u8>, &(u64, u32))) -> <Self as Iterator>::Item {
         let (key, (value_pos, value_len)) = item;
         let value = self.log.read_value(*value_pos, *value_len)?;
+        //返回的key和value都是clone值，不会影响原所有权
         Ok((key.clone(), value))
     }
 }
@@ -175,6 +177,9 @@ impl Log {
     }
 
     // 构建内存索引
+    // +------+------------------------+
+    // | key    (val pos, value len)|
+    // +------+------------------------+
     fn load_index(&mut self) -> Result<KeyDir> {
         let mut len_buf = [0u8; KEY_VAL_HEADER_LEN as usize];
         let mut keydir = KeyDir::new();
