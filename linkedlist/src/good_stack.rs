@@ -13,7 +13,7 @@ struct Node<T> {
 
 //每个集合类型应该实现 3 种迭代器类型：
 
-//IntoIter - T
+//IntoIter - T  直接返回所有权
 pub struct IntoIter<T>(List<T>);
 
 impl<T> List<T> {
@@ -29,10 +29,31 @@ impl<T> Iterator for IntoIter<T> {
         self.0.pop()
     }
 }
-//IterMut - &mut T
-//Iter - &T
+//IterMut - &mut T  返回可变引用
+pub struct IterMut<'a, T> {
+    next: Option<&'a mut Node<T>>,
+}
+
+impl<T> List<T> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, T> {
+        IterMut { next: self.head.as_deref_mut() }
+    }
+}
+
+impl<'a, T> Iterator for IterMut<'a, T> {
+    type Item = &'a mut T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next.take().map(|node| {
+            self.next = node.next.as_deref_mut();
+            &mut node.elem
+        })
+    }
+}
+
+//Iter - &T  返回不可变引用
 //这里的基本逻辑是我们持有一个当前节点的指针，当生成一个值后，该指针将指向下一个节点。
-//iter中的next至少要比iter活的更长
+//iter中的next至少要比iter活的更长（源比派生要活得长）
 pub struct Iter<'a, T> {
     next: Option<&'a Node<T>>,
 }
@@ -42,7 +63,9 @@ impl<T> List<T> {
     // 生命消除规则，只有一个参数或有&self时，输出生命周期自动标注
     pub fn iter(&self) -> Iter<T> {
         // 这里我们为 `iter` 声明一个生命周期 'a , 此时 `&self` 需要至少和 `Iter` 活得一样久
-        // as_deref() 从 Option<T> (或 &Option<T>) 转换为 Option<&T::Target>。
+        //self.head.as_ref().map(|node| &**node)
+        //self.head.as_ref().map::<&Node<T>, _>(|node| &node)
+        // as_deref() 从 Option<T> (或 &Option<T>) 转换为 Option<&T::Target>
         Iter { next: self.head.as_deref() }
     }
 }
@@ -66,7 +89,7 @@ impl<T> List<T> {
     pub fn push(&mut self, elem: T) {
         let new_node = Box::new(Node {
             elem: elem,
-            //replace方法把head的所有权置换出来赋值给next
+            //take方法可以拿到option的所有权，从选项中取出值，将 None 留在其位置。
             next: self.head.take(),
         });
 
@@ -82,8 +105,8 @@ impl<T> List<T> {
     }
 
     pub fn peek(&self) -> Option<&T> {
-        //self作为参数会传递所有权，如此就不能仅返回T的引用了
-        //不能返回本地变量的引用
+        //self作为参数会传递所有权，如此就不能仅返回T的引用了,因为self会被释放
+        //map作用在self.head中会拿到所有权，离开作用域会被释放，不能返回本地变量的引用
         //让 map 作用在引用上，而不是直接作用在 self.head 上
         //as_ref()方法将一个 Option<T> 变成了 Option<&T>
         //&Box<Node<T>>可以自动解引用
@@ -178,6 +201,18 @@ fn into_iter() {
     assert_eq!(iter.next(), Some(1));
     assert_eq!(iter.next(), None);
 }
+
+#[test]
+fn iter_mut() {
+    let mut list = List::new();
+    list.push(1); list.push(2); list.push(3);
+
+    let mut iter = list.iter_mut();
+    assert_eq!(iter.next(), Some(&mut 3));
+    assert_eq!(iter.next(), Some(&mut 2));
+    assert_eq!(iter.next(), Some(&mut 1));
+}
+
 
 #[test]
 fn iter() {
