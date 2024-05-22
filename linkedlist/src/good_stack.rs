@@ -53,7 +53,7 @@ impl<'a, T> Iterator for IterMut<'a, T> {
 
 //Iter - &T  返回不可变引用
 //这里的基本逻辑是我们持有一个当前节点的指针，当生成一个值后，该指针将指向下一个节点。
-//iter中的next至少要比iter活的更长（源比派生要活得长）
+//iter中的next至少要比iter活的更长（源比派生要活得长, 属性比结构体要活得长）
 pub struct Iter<'a, T> {
     next: Option<&'a Node<T>>,
 }
